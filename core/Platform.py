@@ -63,7 +63,6 @@ class Platform:
 
     def update_student_history(self, new_confidence, new_score):
         dict = self.student.question_bank
-        print(new_confidence)
         for i in new_confidence.keys():
             dict[i].append(new_confidence[i])
 
