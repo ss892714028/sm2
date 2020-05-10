@@ -70,7 +70,6 @@ class Platform:
         schedule = self.student.schedule
         for i in dict.keys():
             if dict[i]:
-                print(dict[i])
                 interval = self.sm2(dict[i])
                 schedule[i] = interval
 
@@ -128,6 +127,6 @@ class Platform:
 
 
 if __name__ == '__main__':
-    p = Platform('110', {i: random.randint(0,3) for i in range(10)}, [1, 2, 3, 4, 5, 6],'1', True)
+    p = Platform('110', {str(i): random.randint(0,3) for i in range(10)}, [str(i) for i in range(10)],'1', True)
     p.main()
 
