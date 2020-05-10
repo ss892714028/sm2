@@ -15,6 +15,7 @@ class Student:
             self.question_bank, self.schedule = self.initialize(question_bank)
             self.score = []
         else:
+            self.question_bank = question_bank
             self.question_bank, self.score, self.schedule = self.load()
 
     @property
@@ -43,6 +44,7 @@ class Student:
         schedule_dir = '../data/schedule/'+str(self.student_name)+'.p'
         with open(qb_dir, 'rb') as fp:
             qb = pickle.load(fp)
+
         for i in self.question_bank:
             if i not in qb.keys():
                 qb[i] = []
@@ -55,9 +57,3 @@ class Student:
 
         return qb, score, schedule
 
-
-if __name__ == '__main__':
-    s = Student('bob', ['1','2'], first_time=True)
-    print(s.student_name)
-    s.student_name = 'S'
-    print(s.student_name)

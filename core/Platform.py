@@ -4,12 +4,13 @@ import random
 from Scorer import Scorer
 import pickle
 import os
-import math
+from datetime import datetime
+import time
 # score(list), question_bank(map: {question_id: list of confidence history), questions:
 
 
 class Platform:
-    def __init__(self, student_name, questions, question_bank, date, first_time=False):
+    def __init__(self, student_name, questions, question_bank, first_time=False):
         """
         :param questions:
         :param question_bank:
@@ -18,8 +19,23 @@ class Platform:
         self.student_name = student_name
         self.questions = questions
         self.student = Student(student_name, question_bank, first_time=first_time)
-        self.date = date
         self.num_questions = np.random.randint(5, 20)
+        # get current timestamp
+        self.ts = datetime.now().timestamp()
+        # get current time
+        self.date = self.ts_to_date(self.ts)
+
+    @staticmethod
+    def ts_to_date(ts):
+        return datetime.fromtimestamp(ts).strftime('%Y-%m-%d')
+
+    @staticmethod
+    def date_to_ts(date):
+        return time.mktime(datetime.strptime(date, '%Y-%m-%d').timetuple())
+
+    @staticmethod
+    def days_to_ts(date):
+        return date * 86400
 
     def get_questions(self):
         """
@@ -57,9 +73,27 @@ class Platform:
             temp[i] = confidence
             total_score.append(score)
 
-        print(self.update_student_history(new_confidence=temp, new_score=np.mean(total_score)))
+        dict, student_score, schedule = self.update_student_history(new_confidence=temp, new_score=np.mean(total_score))
+        print('for student'+ str(self.student_name) + '\n'
+              + 'Student Score:' + str(student_score))
+
+        self.print_confidence(dict)
+        self.print_schedule(schedule)
 
         return temp, np.mean(total_score)
+
+    @staticmethod
+    def print_confidence(d):
+        print('Confidence history for this student')
+        for key, value in d.items():
+            print('Question ID ' + str(key))
+            print(*value)
+
+    @staticmethod
+    def print_schedule(d):
+        print('Schedule for this student')
+        for key, value in d.items():
+            print('Question ID ' + str(key) + ' date ' + str(value))
 
     def update_student_history(self, new_confidence, new_score):
         dict = self.student.question_bank
@@ -71,16 +105,15 @@ class Platform:
         for i in dict.keys():
             if dict[i]:
                 interval = self.sm2(dict[i])
-                schedule[i] = interval
+                ts = self.days_to_ts(interval) + self.ts
+                schedule[i] = self.ts_to_date(ts)
 
-        # self.student.question_bank = dict
-        # self.student.schedule = schedule
-        # Save
+                # Save
         qb_dir = '../data/qb/'
         score_dir = '../data/score/'
         schedule_dir = '../data/schedule/'
 
-        for i in ([qb_dir,score_dir,schedule_dir]):
+        for i in ([qb_dir, score_dir,schedule_dir]):
             if not os.path.exists(i):
                 os.makedirs(i)
         pickle.dump(dict, open(qb_dir+str(self.student_name) + '.p', "wb"))
@@ -127,6 +160,7 @@ class Platform:
 
 
 if __name__ == '__main__':
-    p = Platform('110', {str(i): random.randint(0,3) for i in range(10)}, [str(i) for i in range(10)],'1', True)
+    p = Platform('1', {i: 10 for i in range(4)}, [1, 2], False)
+    p.ts = time.mktime(datetime.strptime('2020-05-20', '%Y-%m-%d').timetuple())
     p.main()
 
