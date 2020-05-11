@@ -1,6 +1,7 @@
 import numpy as np
 from Sm2p import sm2
 import pickle
+import matplotlib.pyplot as plt
 
 
 class Student:
@@ -57,3 +58,6 @@ class Student:
 
         return qb, score, schedule
 
+    def plot_score(self):
+        p = plt.plot(self.score)
+        p.show()

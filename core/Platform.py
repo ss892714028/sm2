@@ -18,12 +18,17 @@ class Platform:
         """
         self.student_name = student_name
         self.questions = questions
-        self.student = Student(student_name, question_bank, first_time=first_time)
-        self.num_questions = np.random.randint(5, 20)
+        self.question_bank = question_bank
+        self.first_time = first_time
+        self.student = Student(self.student_name, self.question_bank, first_time=self.first_time)
+        self.num_questions = 10
         # get current timestamp
         self.ts = datetime.now().timestamp()
-        # get current time
-        self.date = self.ts_to_date(self.ts)
+
+    # get current time
+    @property
+    def date(self):
+        return self.ts_to_date(self.ts)
 
     @staticmethod
     def ts_to_date(ts):
@@ -46,14 +51,19 @@ class Platform:
         for key, value in self.student.schedule.items():
             if self.date == value:
                 questions.append(key)
+        reviews = questions
+        print('Reviews: {}'.format(reviews))
         # get the additional number of questions if the questions due today is not enough
         num_new_question = self.num_questions - len(questions)
 
-        # randomly sample additional questions from the question pool of the student
-
+        # randomly sample additional questions from the available question pool of the student
         if num_new_question > 0:
-            _pool = [i for i in self.student.schedule.keys() if i not in questions]
-            questions = questions + random.sample(_pool, min(num_new_question, len(_pool)))
+            _pool = [i for i in self.student.question_bank if i not in questions]
+            # if there is not enough questions in the pool, only take what is available
+            new_question = random.sample(_pool, min(num_new_question, len(_pool)))
+            print('New questions: {}'.format(new_question))
+            questions = questions + new_question
+            print('Total number of questions: {}'.format(len(questions)))
         return questions
 
     def give_quiz(self, questions):
@@ -64,17 +74,18 @@ class Platform:
         """
         temp = {}
         total_score = []
+
         for i in questions:
-            ans = input(str(i))
-            conf = input('confidence 0-2')
+            ans = input('Answer Question ' + str(i) + ': ')
+            conf = input('Pick a confidence score ranging 0-2: ')
             s = Scorer(i, self.questions[i], ans, conf)
-            confidence = s.calculate_confidence()
+            evaluation = s.calculate_confidence()
             score = s.calculate_score()
-            temp[i] = confidence
+            temp[i] = evaluation
             total_score.append(score)
 
         dict, student_score, schedule = self.update_student_history(new_confidence=temp, new_score=np.mean(total_score))
-        print('for student'+ str(self.student_name) + '\n'
+        print('for student' + str(self.student_name) + '\n'
               + 'Student Score:' + str(student_score))
 
         self.print_confidence(dict)
@@ -160,7 +171,20 @@ class Platform:
 
 
 if __name__ == '__main__':
-    p = Platform('1', {i: 10 for i in range(4)}, [1, 2], False)
-    p.ts = time.mktime(datetime.strptime('2020-05-20', '%Y-%m-%d').timetuple())
+    import pprint
+    print('Displaying {question: ans}')
+
+    qb = {str(i): random.randint(0, 4) for i in range(100)}
+    pprint.pprint(qb)
+    student_bank = {'1', '2', '4'}
+    p = Platform('1', qb, student_bank, True)
     p.main()
+    student_bank.add(str(random.randint(0, 100)))
+    for i in range(100):
+        p = Platform('1', qb, student_bank, False)
+        p.ts = p.ts + (i+1) * 86400
+        print('today is: ' + str(p.date))
+        p.main()
+        student_bank.add(str(random.randint(0, 100)))
+
 
