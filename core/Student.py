@@ -34,8 +34,7 @@ class Student:
             qb[i] = []
 
         schedule = {}
-        for i in question_bank:
-            schedule[i] = None
+
         return qb, schedule
 
     def load(self):

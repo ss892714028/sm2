@@ -27,6 +27,8 @@ class Scorer:
 
     def calculate_score(self):
         if self.correctness:
+            print('correct')
             return 1
         else:
+            print('incorrect')
             return 0
