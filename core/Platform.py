@@ -1,4 +1,5 @@
 import numpy as np
+import psycopg2
 from Student import Student
 import random
 from Scorer import Scorer
@@ -6,6 +7,7 @@ import pickle
 import os
 from datetime import datetime
 import time
+import json
 
 
 class Platform:
@@ -25,6 +27,9 @@ class Platform:
     automatically generate a quiz for the student. If the number of questions that are due is lower than the number of
     questions that is passed in, we add new (unseen) questions for the student. This is done by sampling new questions
     from that student's own question bank, excluding the questions already in the schedule.
+
+    Question Mastery: If the student gets a question correct for 5 consecutive times, the question is considered mastered
+    and will not appear again in the future.
     """
 
     def __init__(self, student_name, questions, question_bank, first_time=False):
@@ -38,7 +43,7 @@ class Platform:
         self.question_bank = question_bank
         self.first_time = first_time
         self.student = Student(self.student_name, self.question_bank, first_time=self.first_time)
-        self.num_questions = 10
+        self.num_questions = 20
         # get current timestamp
         self.ts = datetime.now().timestamp()
 
@@ -59,6 +64,41 @@ class Platform:
     def days_to_ts(date):
         return date * 86400
 
+    @staticmethod
+    def create_database():
+        connection = psycopg2.connect(user="postgres",
+                                      password="star0731",
+                                      host="127.0.0.1",
+                                      port="5432",
+                                      database="sm2")
+        cursor = connection.cursor()
+        create_table_query = '''
+        -- Table: public.student
+        DROP TABLE IF EXISTS student; 
+        -- DROP TABLE public.student;
+
+        CREATE TABLE public.student
+        (
+            STUDENT_ID SERIAL PRIMARY KEY,
+            STUDENT_NAME VARCHAR(50) UNIQUE NOT NULL,
+            QUESTION_BANK TEXT,
+            SCORE TEXT,
+            SCHEDULE TEXT,
+            MASTERED TEXT
+        )
+
+        WITH (
+            OIDS = FALSE
+        )
+        TABLESPACE pg_default;
+
+        ALTER TABLE public.student
+            OWNER to postgres;
+        '''
+        cursor.execute(create_table_query)
+        connection.commit()
+        connection.close()
+
     def get_questions(self):
         """
         :return: question id in this quiz for this student
@@ -66,7 +106,7 @@ class Platform:
         # get the questions that are due today
         questions = []
         for key, value in self.student.schedule.items():
-            if self.date == value:
+            if self.date == value and key not in self.student.mastered:
                 questions.append(key)
         reviews = questions
         print('Reviews: {}'.format(reviews))
@@ -74,15 +114,10 @@ class Platform:
         num_new_question = self.num_questions - len(questions)
 
         # randomly sample additional questions from the available question pool of the student that
-        # are not in the schedule
+        # are not in the schedule AND are yet mastered
         if num_new_question > 0:
-            #
-            # if self.student.schedule.keys():
             _pool = [i for i in self.student.question_bank if i not in set(questions)
-                     and i not in self.student.schedule.keys()]
-            # else:
-            #     _pool = [i for i in self.student.question_bank if i not in set(questions)]
-
+                     and i not in self.student.schedule.keys() and i not in self.student.mastered]
             # if there is not enough questions in the pool, only take what is available
             new_question = random.sample(_pool, min(num_new_question, len(_pool)))
             print('New questions: {}'.format(new_question))
@@ -100,16 +135,18 @@ class Platform:
         total_score = []
 
         for i in questions:
-            # comment out for testing
+            # for manual input ans
             # ans = input('Answer Question ' + str(i) + ': ')
             # conf = input('Pick a self reported confidence score ranging [0, 2]: ')
 
-            # comment out for use
-            ans = random.randint(0, 1)
+            # to use answer_question method from Student class
+            ans = self.student.answer_question(self.questions[i])
             print('Answer Question ' + str(i) + ': ' + str(ans))
+            # randomly pick a confidence score for experimentation purposes
             conf = random.randint(0, 2)
             print('Pick a self reported confidence score ranging [0, 2]: ' + str(conf))
 
+            # calculate the score using Scorder class
             s = Scorer(i, self.questions[i], ans, conf)
             evaluation = s.calculate_confidence()
             score = s.calculate_score()
@@ -120,9 +157,38 @@ class Platform:
         print('for student' + str(self.student_name) + '\n'
               + 'Student Score:' + str(student_score))
 
+        # update student question_bank and mastered questions
+        self.student.question_bank = dict
+        self.student.update_mastered()
+
+        # print for visualization
         self.print_evaluation(dict)
         self.print_schedule(schedule)
 
+        # Save
+        connection = psycopg2.connect(user="postgres",
+                                      password="star0731",
+                                      host="127.0.0.1",
+                                      port="5432",
+                                      database="sm2")
+        cursor = connection.cursor()
+
+        str_dict, str_score, str_schedule, str_mastered = \
+            json.dumps(dict), json.dumps(self.student.score), json.dumps(schedule), json.dumps(list(self.student.mastered))
+
+        insert_table_query = f'''
+        INSERT INTO PUBLIC.STUDENT (STUDENT_NAME, QUESTION_BANK, SCORE, SCHEDULE, MASTERED)
+        VALUES
+        ('{self.student.student_name}','{str_dict}', '{str_score}', '{str_schedule}', '{str_mastered}')
+        ON CONFLICT (STUDENT_NAME) DO UPDATE SET 
+        QUESTION_BANK = '{str_dict}',
+        SCORE = '{str_score}',
+        SCHEDULE = '{str_schedule}',
+        MASTERED = '{str_mastered}';
+        '''
+        cursor.execute(insert_table_query)
+        connection.commit()
+        connection.close()
         return temp, np.mean(total_score)
 
     @staticmethod
@@ -139,29 +205,19 @@ class Platform:
             print('Question ID ' + str(key) + ' date ' + str(value))
 
     def update_student_history(self, new_evaluation, new_score):
+        # add today's data to history
         dict = self.student.question_bank
         for i in new_evaluation.keys():
             dict[i].append(new_evaluation[i])
-
+        # add score
         self.student.score.append(new_score)
         schedule = self.student.schedule
         for i in dict.keys():
-            if dict[i]:
+            # if history not empty AND asked today AND yet to be mastered
+            if dict[i] and i in new_evaluation.keys() and i not in self.student.mastered:
                 interval = self.sm2(dict[i])
                 ts = self.days_to_ts(interval) + self.ts
                 schedule[i] = self.ts_to_date(ts)
-
-                # Save
-        qb_dir = '../data/qb/'
-        score_dir = '../data/score/'
-        schedule_dir = '../data/schedule/'
-
-        for i in ([qb_dir, score_dir,schedule_dir]):
-            if not os.path.exists(i):
-                os.makedirs(i)
-        pickle.dump(dict, open(qb_dir+str(self.student_name) + '.p', "wb"))
-        pickle.dump(self.student.score, open(score_dir + str(self.student_name) + '.p', "wb"))
-        pickle.dump(schedule, open(schedule_dir + str(self.student_name) + '.p', "wb"))
 
         return dict, self.student.score, schedule
 
@@ -200,25 +256,31 @@ class Platform:
     def main(self):
         questions = self.get_questions()
         new_confidence, new_score = self.give_quiz(questions)
+        print(self.student.mastered)
 
 
 if __name__ == '__main__':
     import pprint
+    import random
     print('Displaying {question: ans}')
 
     qb = {str(i): random.randint(0, 1) for i in range(1000)}
     # pprint.pprint(qb)
     student_bank = {'1', '2', '4'}
-    p = Platform('1', qb, student_bank, True)
+    p = Platform('SIDA', qb, student_bank, True)
+    p.create_database()
     p.main()
-
     student_bank.add(str(random.randint(0, 999)))
-    for i in range(100):
+    for i in range(10):
         print('----------------------------------------NewDay---------------------------------------------')
-        p = Platform('1', qb, student_bank, False)
+
+        p = Platform('SIDA', qb, student_bank, False)
         p.ts = p.ts + (i+1) * 86400
         print('Today is: ' + str(p.date))
         p.main()
-        student_bank.add(str(random.randint(0, 999)))
+
+        rnd = random.randint(0, 100)
+        if rnd > 70:
+            student_bank.add(str(random.randint(0, 999)))
     print(p.student.question_bank)
 
