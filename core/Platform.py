@@ -32,7 +32,7 @@ class Platform:
     and will not appear again in the future.
     """
 
-    def __init__(self, student_name, questions, question_bank, first_time=False):
+    def __init__(self, student_name, questions, question_bank, accuracy, first_time=False):
         """
         :param questions: All questions available in this platform
         :param question_bank: Student individual question bank
@@ -42,7 +42,7 @@ class Platform:
         self.questions = questions
         self.question_bank = question_bank
         self.first_time = first_time
-        self.student = Student(self.student_name, self.question_bank, first_time=self.first_time)
+        self.student = Student(self.student_name, self.question_bank, accuracy, first_time=self.first_time)
         self.num_questions = 20
         # get current timestamp
         self.ts = datetime.now().timestamp()
@@ -84,7 +84,8 @@ class Platform:
             QUESTION_BANK TEXT,
             SCORE TEXT,
             SCHEDULE TEXT,
-            MASTERED TEXT
+            MASTERED TEXT,
+            INTERVALS TEXT
         )
 
         WITH (
@@ -153,16 +154,17 @@ class Platform:
             temp[i] = evaluation
             total_score.append(score)
 
-        dict, student_score, schedule = self.update_student_history(new_evaluation=temp, new_score=np.mean(total_score))
+        evaluations, student_score, schedule, intervals = \
+            self.update_student_history(new_evaluation=temp, new_score=np.mean(total_score))
         print('for student' + str(self.student_name) + '\n'
               + 'Student Score:' + str(student_score))
 
         # update student question_bank and mastered questions
-        self.student.question_bank = dict
+        self.student.question_bank = evaluations
         self.student.update_mastered()
-
+        self.student.intervals = intervals
         # print for visualization
-        self.print_evaluation(dict)
+        self.print_evaluation(evaluations)
         self.print_schedule(schedule)
 
         # Save
@@ -173,18 +175,20 @@ class Platform:
                                       database="sm2")
         cursor = connection.cursor()
 
-        str_dict, str_score, str_schedule, str_mastered = \
-            json.dumps(dict), json.dumps(self.student.score), json.dumps(schedule), json.dumps(list(self.student.mastered))
+        str_dict, str_score, str_schedule, str_mastered, str_intervals = \
+            json.dumps(evaluations), json.dumps(self.student.score), json.dumps(schedule), \
+            json.dumps(list(self.student.mastered)), json.dumps(intervals)
 
         insert_table_query = f'''
-        INSERT INTO PUBLIC.STUDENT (STUDENT_NAME, QUESTION_BANK, SCORE, SCHEDULE, MASTERED)
+        INSERT INTO PUBLIC.STUDENT (STUDENT_NAME, QUESTION_BANK, SCORE, SCHEDULE, MASTERED, INTERVALS)
         VALUES
-        ('{self.student.student_name}','{str_dict}', '{str_score}', '{str_schedule}', '{str_mastered}')
+        ('{self.student.student_name}','{str_dict}', '{str_score}', '{str_schedule}', '{str_mastered}','{str_intervals}')
         ON CONFLICT (STUDENT_NAME) DO UPDATE SET 
         QUESTION_BANK = '{str_dict}',
         SCORE = '{str_score}',
         SCHEDULE = '{str_schedule}',
-        MASTERED = '{str_mastered}';
+        MASTERED = '{str_mastered}',
+        INTERVALS = '{str_intervals}';
         '''
         cursor.execute(insert_table_query)
         connection.commit()
@@ -204,22 +208,37 @@ class Platform:
         for key, value in d.items():
             print('Question ID ' + str(key) + ' date ' + str(value))
 
+    @staticmethod
+    def update(old, new):
+        for i in new.keys():
+            old[i].append(new[i])
+        return old
+
     def update_student_history(self, new_evaluation, new_score):
+
+        # Event tracking: store all new review intervals in a map, {question_id: interval}
+        new_intervals = {}
         # add today's data to history
-        dict = self.student.question_bank
-        for i in new_evaluation.keys():
-            dict[i].append(new_evaluation[i])
+
+        evaluations = self.student.question_bank
+        evaluations = self.update(evaluations, new_evaluation)
         # add score
         self.student.score.append(new_score)
         schedule = self.student.schedule
-        for i in dict.keys():
+        for i in evaluations.keys():
             # if history not empty AND asked today AND yet to be mastered
-            if dict[i] and i in new_evaluation.keys() and i not in self.student.mastered:
-                interval = self.sm2(dict[i])
+            if evaluations[i] and i in new_evaluation.keys() and i not in self.student.mastered:
+                # calculate interval using previous history
+                interval = self.sm2(evaluations[i])
+                # store new interval for event tracking
+                new_intervals[i] = interval
+                # calculate next date to review this question
                 ts = self.days_to_ts(interval) + self.ts
                 schedule[i] = self.ts_to_date(ts)
-
-        return dict, self.student.score, schedule
+        # store today's data to history
+        old_intervals = self.student.intervals
+        old_intervals = self.update(old_intervals, new_intervals)
+        return evaluations, self.student.score, schedule, old_intervals
 
     @staticmethod
     def sm2(x: [int], a=6.0, b=-0.8, c=0.28, d=0.02, theta=0.2) -> float:
@@ -256,7 +275,7 @@ class Platform:
     def main(self):
         questions = self.get_questions()
         new_confidence, new_score = self.give_quiz(questions)
-        print(self.student.mastered)
+        print('Mastered questions: ', self.student.mastered)
 
 
 if __name__ == '__main__':
@@ -267,20 +286,34 @@ if __name__ == '__main__':
     qb = {str(i): random.randint(0, 1) for i in range(1000)}
     # pprint.pprint(qb)
     student_bank = {'1', '2', '4'}
-    p = Platform('SIDA', qb, student_bank, True)
+    p = Platform('SIDA', qb, student_bank, 50, True)
     p.create_database()
     p.main()
     student_bank.add(str(random.randint(0, 999)))
-    for i in range(10):
+    for i in range(100):
         print('----------------------------------------NewDay---------------------------------------------')
 
-        p = Platform('SIDA', qb, student_bank, False)
+        p = Platform('SIDA', qb, student_bank, 50, False)
         p.ts = p.ts + (i+1) * 86400
         print('Today is: ' + str(p.date))
         p.main()
-
         rnd = random.randint(0, 100)
-        if rnd > 70:
+        if rnd > 50:
             student_bank.add(str(random.randint(0, 999)))
-    print(p.student.question_bank)
 
+    qb = {str(i): random.randint(0, 1) for i in range(1000)}
+    # pprint.pprint(qb)
+    student_bank = {'1', '2', '4'}
+    p = Platform('Dr.Robinson', qb, student_bank, 80, True)
+    p.main()
+    student_bank.add(str(random.randint(0, 999)))
+    for i in range(100):
+        print('----------------------------------------NewDay---------------------------------------------')
+
+        p = Platform('Dr.Robinson', qb, student_bank, 80, False)
+        p.ts = p.ts + (i+1) * 86400
+        print('Today is: ' + str(p.date))
+        p.main()
+        rnd = random.randint(0, 100)
+        if rnd > 50:
+            student_bank.add(str(random.randint(0, 999)))

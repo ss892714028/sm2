@@ -21,7 +21,7 @@ class Scorer:
         :return: evaluation score
         """
         if self.correctness:
-            return 2 + int(self.confidence)
+            return 3 + int(self.confidence)
         else:
             return 2 - int(self.confidence)
 

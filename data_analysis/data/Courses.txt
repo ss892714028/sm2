@@ -1,0 +1,20 @@
+id	category	sortorder	fullname	shortname	idnumber	summary	summaryformat	format	showgrades	newsitems	startdate	enddate	marker	maxbytes	legacyfiles	showreports	visible	visibleold	groupmode	groupmodeforce	defaultgroupingid	lang	calendartype	theme	timecreated	timemodified	requested	enablecompletion	completionnotify	cacherev
+1	0	1	REEL	REEL			0	site	1	3	0	0	0	0	0	0	1	1	0	0	0				1567536664	1567552742	0	0	0	1568059615
+2	1	10006	Microbiology	Micro-101			1	topics	1	5	1445227200	0	0	0	0	0	1	1	0	0	0				1445213594	1567551048	0	1	0	1568059615
+4	1	10010	Buildings as Teaching Tools (NELC)	Buildings as Teaching Tools (NELC)			1	topcoll	1	5	1445227200	0	0	0	0	0	1	1	0	0	0				1445213594	1445213594	0	1	0	1568059615
+5	1	10007	Patient Safety & Quality Improvement	PSQI-101			1	topics	1	5	1445227200	0	0	0	0	0	1	1	0	0	0				1445213594	1567552884	0	1	0	1568059615
+7	1	10008	Antimicrobial Stewardship	AS-101			1	topics	1	5	1445227200	0	0	0	0	0	1	1	0	0	0				1445213594	1567553194	0	1	0	1568059615
+8	1	10009	Diffusion Science	DS-101			1	topics	1	5	1445227200	0	0	0	0	0	1	1	0	0	0				1445213594	1567553387	0	1	0	1568059615
+9	1	10005	TEST	test			1	topics	1	5	1567638000	0	0	0	0	0	1	1	0	0	0				1567763555	1570437518	0	1	0	1570437519
+10	3	30001	Homeopathy- Anatomy Course	Anatomy		<p><b>Anatomy</b>&nbsp;is the study of the structure and relationship between body parts. A<b>natomy</b>&nbsp;is the study of body parts visible to the naked eye, such as the heart or bones.<br></p>	1	topics	1	5	1570230000	1601766000	0	0	0	0	1	1	0	0	0				1570187410	1570187410	0	1	0	1570187417
+12	1	10003	Cell Biology	MolBio-101			1	topics	1	5	1577750400	1609286400	0	0	0	0	1	1	0	0	0				1577737811	1577737811	0	1	0	1577737818
+13	1	10002	Biochemistry	Biochem-101			1	topics	1	5	1577750400	0	0	0	0	0	1	1	0	0	0				1577738029	1577738029	0	1	0	1577738036
+14	1	10004	Epidemiology & Biostatistics	Epi-101			1	topics	1	5	1577750400	0	0	0	0	0	1	1	0	0	0				1577738896	1577738896	0	1	0	1577738904
+15	1	10001	Anatomy	Anat-101			1	topics	1	5	1564527600	0	0	0	0	0	1	1	0	0	0				1577739579	1577775222	0	1	0	1577775223
+17	4	40007	AUA Biochemistry	AUA_Biochem	AUA_Biochem_1		1	topics	1	5	1581724800	1613260800	0	0	0	0	1	1	0	0	0				1581715947	1581717205	0	1	0	1581717206
+18	4	40006	AUA Cell Biology	AUA_Cell Bio	AUA_Cell Bio_1		1	topics	1	5	1581724800	1613260800	0	0	0	0	1	1	0	0	0				1581716036	1581717630	0	1	0	1581717631
+19	4	40005	AUA Anatomy	AUA_Anat	AUA_Anat_1		1	topics	1	5	1581724800	1613260800	0	0	0	0	1	1	0	0	0				1581716736	1581778381	0	1	0	1581778382
+20	4	40003	AUA Foundations	AUA_Found1			1	topics	1	5	1581724800	1613520000	0	0	0	0	1	1	0	0	0				1581900363	1583865572	0	1	0	1583865573
+21	4	40004	Musculoskeletal (MSK)	AUA_MSK1			1	topics	1	5	1583798400	1615420800	0	0	0	0	1	1	0	0	0				1583866193	1584288356	0	1	0	1584288357
+22	4	40002	AUA Neuroscience	Neuro-1			1	topics	1	5	1587337200	1618873200	0	0	0	0	1	1	0	0	0				1587330578	1587330578	0	1	0	1587330585
+23	4	40001	AUA Gastrointestinal	AUA GIT			1	topics	1	5	1590447600	1621983600	0	0	0	0	1	1	0	0	0				1590446047	1590446047	0	1	0	1590446054

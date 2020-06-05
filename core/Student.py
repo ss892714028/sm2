@@ -1,27 +1,27 @@
 import json
 import numpy as np
-from Sm2p import sm2
 import matplotlib.pyplot as plt
 import psycopg2
 import random
 
 
 class Student:
-    def __init__(self, student_name, question_bank, first_time=False):
+    def __init__(self, student_name, question_bank, accuracy, first_time=False):
         """
         :param question_bank: Questions that the student is available to practice on.
         :param confident: track the self reported confidence score for each question.
         :param score: a list that contains all score of that student
         """
         self.student_name = student_name
+        self.accuracy = accuracy
         if first_time:
-            self.question_bank, self.schedule = self.initialize(question_bank)
+            self.question_bank, self.schedule, self.intervals = self.initialize(question_bank)
             self.score = []
             self.mastered = set()
         else:
             self.question_bank = question_bank
             self.student_id, self.student_name, self.question_bank, \
-                self.score, self.schedule, self.mastered = self.load()
+                self.score, self.schedule, self.mastered, self.intervals = self.load()
 
     @property
     def average_score(self):
@@ -34,18 +34,15 @@ class Student:
                     self.mastered.add(key)
 
     @staticmethod
-    def number_of_days(history):
-        return sm2(history)
-
-    @staticmethod
     def initialize(question_bank):
         qb = {}
         for i in question_bank:
             qb[i] = []
-
         schedule = {}
-
-        return qb, schedule
+        intervals = {}
+        for i in question_bank:
+            intervals[i] = []
+        return qb, schedule, intervals
 
     def load(self):
         connection = psycopg2.connect(user="postgres",
@@ -54,22 +51,38 @@ class Student:
                                       port="5432",
                                       database="sm2")
         cursor = connection.cursor()
-        cursor.execute("SELECT STUDENT_ID, STUDENT_NAME, QUESTION_BANK, SCORE, SCHEDULE, MASTERED FROM PUBLIC.STUDENT "
+        cursor.execute("SELECT STUDENT_ID, STUDENT_NAME, QUESTION_BANK, SCORE, "
+                       "SCHEDULE, MASTERED, INTERVALS FROM PUBLIC.STUDENT "
                        f"WHERE STUDENT.STUDENT_name='{self.student_name}'")
         row = cursor.fetchone()
-        student_id, student_name, qb, score, schedule, mastered = row[0], row[1], row[2], row[3], row[4], row[5]
+        student_id, student_name, evaluations, score, schedule, mastered, intervals = \
+            row[0], row[1], row[2], row[3], row[4], row[5], row[6]
         connection.close()
-        qb, score, schedule, mastered = json.loads(qb), json.loads(score), json.loads(schedule), set(json.loads(mastered))
-        for i in self.question_bank:
-            if i not in qb.keys():
-                qb[i] = []
-        return student_id, student_name, qb, score, schedule, mastered
+        evaluations, score, schedule, mastered, intervals =\
+            json.loads(evaluations), json.loads(score), json.loads(schedule), set(json.loads(mastered)), json.loads(intervals)
+
+        evaluations = self.update(self.question_bank, evaluations)
+        intervals = self.update(self.question_bank, intervals)
+        return student_id, student_name, evaluations, score, schedule, mastered, intervals
 
     @staticmethod
-    def answer_question(ans):
+    def update(qb, new):
+        """
+        Because the student may learn new knowledges and eligible to practice on more questions,
+        we need to update the keys (question ids) for evaluation and interval event tracking.
+        :param qb:
+        :param new:
+        :return:
+        """
+        for i in qb:
+            if i not in new.keys():
+                new[i] = []
+        return new
+
+    def answer_question(self, ans):
         rnd = random.randint(0, 100)
         wrong_ans = np.array([i for i in range(4) if i != ans])
-        if rnd > 90:
+        if rnd > self.accuracy:
             return random.choice(wrong_ans)
         else:
             return ans
@@ -77,3 +90,4 @@ class Student:
     def plot_score(self):
         p = plt.plot(self.score)
         p.show()
+        
