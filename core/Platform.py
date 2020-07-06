@@ -85,7 +85,8 @@ class Platform:
             SCORE TEXT,
             SCHEDULE TEXT,
             MASTERED TEXT,
-            INTERVALS TEXT
+            INTERVALS TEXT,
+            EASINESS TEXT
         )
 
         WITH (
@@ -147,14 +148,14 @@ class Platform:
             conf = random.randint(0, 2)
             print('Pick a self reported confidence score ranging [0, 2]: ' + str(conf))
 
-            # calculate the score using Scorder class
+            # calculate the score using Scorer class
             s = Scorer(i, self.questions[i], ans, conf)
             evaluation = s.calculate_confidence()
             score = s.calculate_score()
             temp[i] = evaluation
             total_score.append(score)
 
-        evaluations, student_score, schedule, intervals = \
+        evaluations, student_score, schedule, intervals, easiness = \
             self.update_student_history(new_evaluation=temp, new_score=np.mean(total_score))
         print('for student' + str(self.student_name) + '\n'
               + 'Student Score:' + str(student_score))
@@ -163,6 +164,7 @@ class Platform:
         self.student.question_bank = evaluations
         self.student.update_mastered()
         self.student.intervals = intervals
+        self.student.easiness = easiness
         # print for visualization
         self.print_evaluation(evaluations)
         self.print_schedule(schedule)
@@ -175,20 +177,21 @@ class Platform:
                                       database="sm2")
         cursor = connection.cursor()
 
-        str_dict, str_score, str_schedule, str_mastered, str_intervals = \
+        str_dict, str_score, str_schedule, str_mastered, str_intervals, str_easiness = \
             json.dumps(evaluations), json.dumps(self.student.score), json.dumps(schedule), \
-            json.dumps(list(self.student.mastered)), json.dumps(intervals)
-
+            json.dumps(list(self.student.mastered)), json.dumps(intervals), json.dumps(easiness)
         insert_table_query = f'''
-        INSERT INTO PUBLIC.STUDENT (STUDENT_NAME, QUESTION_BANK, SCORE, SCHEDULE, MASTERED, INTERVALS)
+        INSERT INTO PUBLIC.STUDENT (STUDENT_NAME, QUESTION_BANK, SCORE, SCHEDULE, MASTERED, INTERVALS, EASINESS)
         VALUES
-        ('{self.student.student_name}','{str_dict}', '{str_score}', '{str_schedule}', '{str_mastered}','{str_intervals}')
+        ('{self.student.student_name}','{str_dict}', '{str_score}',
+            '{str_schedule}', '{str_mastered}','{str_intervals}','{str_easiness}')
         ON CONFLICT (STUDENT_NAME) DO UPDATE SET 
         QUESTION_BANK = '{str_dict}',
         SCORE = '{str_score}',
         SCHEDULE = '{str_schedule}',
         MASTERED = '{str_mastered}',
-        INTERVALS = '{str_intervals}';
+        INTERVALS = '{str_intervals}',
+        EASINESS = '{str_easiness}';
         '''
         cursor.execute(insert_table_query)
         connection.commit()
@@ -215,11 +218,11 @@ class Platform:
         return old
 
     def update_student_history(self, new_evaluation, new_score):
-
+        # take easiness from student
+        easiness_dict = self.student.easiness
         # Event tracking: store all new review intervals in a map, {question_id: interval}
         new_intervals = {}
         # add today's data to history
-
         evaluations = self.student.question_bank
         evaluations = self.update(evaluations, new_evaluation)
         # add score
@@ -228,8 +231,13 @@ class Platform:
         for i in evaluations.keys():
             # if history not empty AND asked today AND yet to be mastered
             if evaluations[i] and i in new_evaluation.keys() and i not in self.student.mastered:
+                # from the sm2 algorithm
                 # calculate interval using previous history
-                interval = self.sm2(evaluations[i])
+                # retrieve the latest easiness value
+
+                easiness, interval = self.sm2_(evaluations[i], float(easiness_dict[i]),i)
+                # update easiness dictionary
+                easiness_dict[i] = easiness
                 # store new interval for event tracking
                 new_intervals[i] = interval
                 # calculate next date to review this question
@@ -238,13 +246,13 @@ class Platform:
         # store today's data to history
         old_intervals = self.student.intervals
         old_intervals = self.update(old_intervals, new_intervals)
-        return evaluations, self.student.score, schedule, old_intervals
+        return evaluations, self.student.score, schedule, old_intervals, easiness_dict
 
     @staticmethod
     def sm2(x: [int], a=6.0, b=-0.8, c=0.28, d=0.02, theta=0.2) -> float:
         """
-        Returns the number of days to delay the next review of an item by, fractionally, based on the history of answers x to
-        a given question, where
+        Returns the number of days to delay the next review of an item by, fractionally, based on the history of
+        answers x to a given question, where
         x == 0: Incorrect, Hardest
         x == 1: Incorrect, Hard
         x == 2: Incorrect, Medium
@@ -253,7 +261,14 @@ class Platform:
         x == 5: Correct, Easiest
         @param x The history of answers in the above scoring.
         @param theta When larger, the delays for correct answers will increase.
+
+        todo: add support for overdue questions
+        todo: add support for self quiz
         """
+        missed_questions = {}
+        for index, item in enumerate(x):
+            if str(item) == 'nan':
+                missed_questions[item] = index
 
         assert all(0 <= x_i <= 5 for x_i in x)
         correct_x = [x_i >= 3 for x_i in x]
@@ -272,6 +287,60 @@ class Platform:
         return a * (max(1.3, 2.5 + sum(b + c * x_i + d * x_i * x_i for x_i in x))) ** (
                     theta * num_consecutively_correct)
 
+    def sm2_(self, x, easiness, question, a=6.0, b=-0.8, c=0.28, d=0.02, theta=0.2):
+        """
+
+        :param x: history of evaluations
+        :param easiness: current easiness of this student/question
+        :param question: question id of this question
+        :param a: Parameter, increase this parameter increases the interval linearly
+        :param b: Parameter
+        :param c: Parameter
+        :param d: Parameter
+        :param theta: Parameter, increase this parameter increases the interval exponentially
+        :return: updated_easiness, interval
+        """
+        assert all(0 <= x_i <= 5 for x_i in [i for i in x if str(i) != 'nan'])
+        # if the last response is empty, simply return the easiness unchanged and with interval = 1
+        if str(x[-1]) == 'nan':
+            return easiness, 1
+        # record the correctness of history responses
+        correct_x = [x_i >= 3 for x_i in x]
+        # save the rating of the current response
+        current_response = x[-1]
+        # if there are more 2 valid responses
+        if len([i for i in x if str(i) != 'nan']) >= 2:
+            # record the value of the previous response
+            last_response = x[-2]
+            # if previous response is nan and current response is correct
+            if str(last_response) == 'nan' and current_response >= 3:
+                # calculate the nan streak
+                num_consec_nan = 0
+                for index, value in enumerate(reversed(x)):
+                    if str(value) != 'nan':
+                        break
+                    num_consec_nan += 1
+                # calculate beta based on the equation
+                schedule = self.student.intervals[question]
+                beta = min(2, sum(schedule[-num_consec_nan:])/schedule[-1])
+            else:
+                beta = 1
+        else:
+            beta = 1
+        # calculate the most recent correct streak
+        num_consecutively_correct = 0
+        for correct in reversed(correct_x):
+            if correct:
+                num_consecutively_correct += 1
+            else:
+                break
+        updated_easiness = max(1.3, easiness + b + c * current_response + d * (current_response ** 2))
+        interval = a * beta * updated_easiness ** (theta * num_consecutively_correct)
+
+        if not correct_x[-1]:
+            return updated_easiness, 1
+        return updated_easiness, interval
+
     def main(self):
         questions = self.get_questions()
         new_confidence, new_score = self.give_quiz(questions)
@@ -279,7 +348,6 @@ class Platform:
 
 
 if __name__ == '__main__':
-    import pprint
     import random
     print('Displaying {question: ans}')
 

@@ -1,3 +1,6 @@
+import numpy as np
+
+
 class Scorer:
     """
     This scorer class takes the correct answer, the student's response, student's self-reported confidence score and
@@ -12,7 +15,14 @@ class Scorer:
 
     @property
     def correctness(self):
+        if str(self.response) == 'nan':
+            return False
         return int(self.ans) == int(self.response)
+
+    @property
+    def empty_response(self):
+        if str(self.response) == 'nan':
+            return True
 
     def calculate_confidence(self):
         """
@@ -22,6 +32,8 @@ class Scorer:
         """
         if self.correctness:
             return 3 + int(self.confidence)
+        if self.empty_response:
+            return np.nan
         else:
             return 2 - int(self.confidence)
 
